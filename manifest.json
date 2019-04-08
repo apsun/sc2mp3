@@ -1,0 +1,21 @@
+{
+  "manifest_version": 2,
+  "name": "SoundCloud to MP3",
+  "description": "Adds a download button to SoundCloud tracks",
+  "applications": {
+    "gecko": {
+      "id": "sc2mp3@crossbowffs.com"
+    }
+  },
+  "version": "1.0",
+  "permissions": [
+    "*://*.soundcloud.com/*",
+    "*://*.sndcdn.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*.soundcloud.com/*"],
+      "js": ["sc2mp3.js"]
+    }
+  ]
+}
