@@ -1,6 +1,5 @@
-// TODO: Find a better way to get this. Currently this is just scraped
-// from the SoundCloud page.
-let clientId = "L6pWQKWWm6oT4Nv0mTWEkxKypNpleA5m";
+// SoundCloud client ID used for API requests.
+let clientId;
 
 // Takes a base URL and an object containing query params and
 // generates a URL with the query params appended.
@@ -157,10 +156,30 @@ function injectDownloadButton(elem) {
     }
 }
 
+// Gets the client ID from the current page. Must only be called
+// after the DOM is ready.
+async function scrapeClientId() {
+    // This code makes me want to gouge out my eyes!
+    // It finds the .js file containing the client ID,
+    // and SEARCHES THROUGH THE SOURCE CODE WITH A REGEX.
+    // It's totally insane, but it works, so...
+    for (let script of document.getElementsByTagName("script")) {
+        if (script.src.includes("/assets/app-")) {
+            let resp = await fetch(script.src);
+            let src = await resp.text();
+            let match = src.match(/client_id:["']([A-Za-z0-9]{32})['"]/);
+            let clientId = match[1];
+            return clientId;
+        }
+    }
+}
+
 // Begins listening for DOM events and immediately injects
 // download buttons into the DOM. Must only be called after
 // the DOM is ready.
-function init() {
+async function init() {
+    clientId = await scrapeClientId();
+
     let observer = new MutationObserver((mutations, observer) => {
         for (let mutation of mutations) {
             for (let elem of mutation.addedNodes) {
