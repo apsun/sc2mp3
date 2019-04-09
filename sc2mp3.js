@@ -10,7 +10,18 @@ function withQuery(baseUrl, params) {
     return url.toString();
 }
 
-// Gets the internal ID of a SoundCloud track given its user-friendly
+// Initiates a download for the specified URL, optionally
+// specifying a filename if the URL is not cross-origin.
+function downloadUrl(url, filename) {
+    let a = document.createElement("a");
+    a.download = filename;
+    a.href = url;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
+// Gets the info for a SoundCloud track given its user-friendly
 // URL (e.g. https://soundcloud.com/choicescarf/departure-remix)
 async function getTrackInfo(trackUrl) {
     let resp = await fetch(
@@ -19,7 +30,7 @@ async function getTrackInfo(trackUrl) {
             "format": "json",
             "client_id": clientId,
         }), {
-            "redirect": "follow"
+            "redirect": "follow",
         }
     );
     let json = await resp.json();
@@ -40,14 +51,25 @@ async function getTrackMp3Url(trackId) {
 // Initiates a download for the specified track.
 async function downloadTrack(trackUrl) {
     let info = await getTrackInfo(trackUrl);
-    let mp3Url = await getTrackMp3Url(info["id"]);
+
+    // If the track is natively downloadable, just replicate
+    // the original download button behavior.
+    if (info["downloadable"]) {
+        downloadUrl(
+            withQuery(info["download_url"], {
+                "client_id": clientId,
+            }),
+            null
+        );
+        return;
+    }
 
     // Generate a user-friendly name for the song.
     // Heuristic: if the title already contains a dash,
     // use that as the full name; otherwise prepend the
     // uploader's name.
     let name = info["title"]
-    if (!name.includes("-")) {
+    if (!name.includes(" - ")) {
         let artist = info["user"]["username"];
         name = `${artist} - ${name}`;
     }
@@ -55,14 +77,10 @@ async function downloadTrack(trackUrl) {
     // a.download doesn't work with cross-origin requests;
     // since the file is hosted on a CDN we do an ugly workaround
     // with blob URLs which are exempt from the policy.
+    let mp3Url = await getTrackMp3Url(info["id"]);
     let resp = await fetch(mp3Url);
     let blob = await resp.blob();
-    let a = document.createElement("a");
-    a.download = `${name}.mp3`;
-    a.href = URL.createObjectURL(blob);
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    downloadUrl(URL.createObjectURL(blob), `${name}.mp3`);
 }
 
 // Guesses a track URL given a DOM element that may or
@@ -93,7 +111,7 @@ function getTrackUrlForElement(elem) {
 
 // Adds download buttons to all action bars under the given element
 // that do not already have them.
-function initDownloadButton(elem) {
+function injectDownloadButton(elem) {
     // Sometimes we get text nodes from MutationObserver
     if (!(elem instanceof HTMLElement)) {
         return;
@@ -146,7 +164,7 @@ function init() {
     let observer = new MutationObserver((mutations, observer) => {
         for (let mutation of mutations) {
             for (let elem of mutation.addedNodes) {
-                initDownloadButton(elem);
+                injectDownloadButton(elem);
             }
         }
     });
@@ -156,7 +174,7 @@ function init() {
         subtree: true,
     });
 
-    initDownloadButton(document.body);
+    injectDownloadButton(document.body);
 }
 
 if (document.readyState === "loading") {

@@ -1,5 +1,10 @@
 # SoundCloud to MP3
 
-Yet another SoundCloud downloader. Doesn't use any external services,
-automatically renames downloaded files based on the track name. Does
-not do ID3 tagging, since I personally strip those out anyways.
+Yet another SoundCloud downloader.
+
+## Features
+
+- Doesn't call out to any external download services
+- Renames downloaded files with the artist and title
+- Only requires one click per download
+- Uses native download option if available
