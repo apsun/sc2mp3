@@ -90,7 +90,8 @@ function getTrackUrlForElement(elem) {
     let container =
         elem.closest(".soundList__item") ||  // Stream
         elem.closest(".trackList__item") ||  // Sets
-        elem.closest(".soundBadgeList__item");  // Sidebar
+        elem.closest(".soundBadgeList__item") ||  // Likes sidebar
+        elem.closest(".historicalPlays__item");  // History sidebar
 
     // This item is in a list, now look for a clickable title within
     // the container.
@@ -148,7 +149,17 @@ function injectDownloadButton(elem) {
         button.innerText = "Download";
         button.title = "Download";
         button.onclick = async (e) => {
-            await downloadTrack(trackUrl);
+            button.innerText = "Downloading...";
+            button.classList.add("sc-button-selected");
+            try {
+                await downloadTrack(trackUrl);
+                button.innerText = "Download";
+            } catch (ex) {
+                button.innerText = "Failed :-(";
+                throw ex;
+            } finally {
+                button.classList.remove("sc-button-selected");
+            }
         };
 
         // Insert our download button into the page
