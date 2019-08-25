@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <link href="options.css" rel="stylesheet">
+  </head>
+  <body>
+    <form name="optionsForm">
+      <div class="row">
+        <label>Download in High Quality</label>
+        <div>
+          <label>
+            <input type="radio" name="enableHQ" value="1">
+            <span>Enable</span>
+          </label>
+          <label>
+            <input type="radio" name="enableHQ" value="0">
+            <span>Disable</span>
+          </label>
+        </div>
+      </div>
+      <div class="row">
+        This requires a SoundCloud Go+ subscription to have any effect!
+        If enabled, this will send your login cookies to SoundCloud when
+        downloading songs and allow you to download in high quality 256kbps
+        AAC instead of 128kbps MP3. Note that this may cause your account
+        to be flagged for violating the SoundCloud terms of service. Use
+        with caution!
+      </div>
+    </form>
+    <script src="options.js"></script>
+  </body>
+</html>

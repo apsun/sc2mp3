@@ -1,3 +1,5 @@
+"use strict";
+
 // SoundCloud client ID used for API requests.
 let clientId;
 
@@ -7,6 +9,50 @@ function withQuery(baseUrl, params) {
     let url = new URL(baseUrl);
     Object.entries(params).forEach(([k, v]) => url.searchParams.append(k, v));
     return url.toString();
+}
+
+// Wrapper for fetch() that takes a query parameter and adds
+// it to the URL, and returns the result as JSON.
+async function fetchJson(url, init) {
+    if (init !== null && init["query"] !== undefined) {
+        url = withQuery(url, init["query"]);
+        delete init["query"];
+    }
+    let resp = await fetch(url, init);
+    if (!resp.ok) {
+        throw new Error(`Request to ${url} failed with result ${resp.status}`);
+    }
+    let json = await resp.json();
+    return json;
+}
+
+// Wrapper for fetchQuery() that adds the clientId and
+// authToken parameters.
+async function fetchAuthorized(url, authToken, args) {
+    let headers = {};
+    if (authToken !== null) {
+        headers["Authorization"] = "OAuth " + authToken;
+    }
+
+    let query = {
+        "client_id": clientId,
+        ...args
+    };
+
+    return await fetchJson(url, {
+        "headers": headers,
+        "query": query,
+    });
+}
+
+// Returns the value of the specified cookie, or null if the
+// cookie is not set.
+function getCookie(key) {
+    let match = document.cookie.match(new RegExp("(^|;) *" + key + "=([^;]+)"));
+    if (match !== null) {
+        return match[2];
+    }
+    return null;
 }
 
 // Initiates a download for the specified URL, optionally
@@ -20,42 +66,89 @@ function downloadUrl(url, filename) {
     document.body.removeChild(a);
 }
 
-// Gets the info for a SoundCloud track given its user-friendly
-// URL (e.g. https://soundcloud.com/choicescarf/departure-remix)
-async function getTrackInfo(trackUrl) {
-    let resp = await fetch(
-        withQuery("https://api.soundcloud.com/resolve", {
+// Picks a transcoding matching the specified quality ("hq" or "sq").
+function pickTranscoding(trackObj, quality) {
+    // SoundCloud has two formats - a HLS streaming playlist and
+    // a plain old music file ("progressive"). Obviously, we want
+    // to pick the easier method, so use progressive formats.
+    for (let transcoding of trackObj["media"]["transcodings"]) {
+        if (transcoding["format"]["protocol"] !== "progressive") {
+            continue;
+        }
+        if (transcoding["quality"] === quality) {
+            return transcoding;
+        }
+    }
+    return null;
+}
+
+// Generates a user-friendly name for the given track.
+function getTrackName(trackObj) {
+    // Heuristic: if the title already contains a dash,
+    // use that as the full name; otherwise prepend the
+    // uploader's name.
+    let name = trackObj["title"];
+    if (!name.includes(" - ")) {
+        let artist = trackObj["user"]["username"];
+        name = `${artist} - ${name}`;
+    }
+    return name;
+}
+
+// Initiates a download for the specified track using one of
+// the transcoded versions (as opposed to the original).
+async function downloadTrackTranscoding(trackObj, authToken) {
+    // Pick a transcoding, preferring HQ obviously
+    let transcoding =
+        pickTranscoding(trackObj, "hq") ||
+        pickTranscoding(trackObj, "sq");
+    if (transcoding === null) {
+        throw new Error("Failed to find a valid transcoding");
+    }
+
+    // One more level of indirection here...
+    let urlResp = await fetchAuthorized(transcoding["url"], authToken, {});
+    let url = urlResp["url"];
+
+    // Build filename from track name and extension of file URL.
+    // HQ files are .m4a, SQ files are .mp3
+    let name = getTrackName(trackObj);
+    let path = new URL(url).pathname;
+    let extension = path.substring(path.lastIndexOf(".") + 1);
+    let filename = `${name}.${extension}`;
+
+    // a.download doesn't work with cross-origin requests;
+    // since the file is hosted on a CDN we do an ugly workaround
+    // with blob URLs which are exempt from the policy.
+    let resp = await fetch(url);
+    let blob = await resp.blob();
+    downloadUrl(URL.createObjectURL(blob), filename);
+}
+
+// Initiates a download for the specified track URL.
+async function downloadTrack(trackUrl) {
+    // If we want to download in HQ, read the auth cookie so
+    // we can see HQ transcodings
+    let authToken = null;
+    let settings = await browser.storage.sync.get("enableHQ");
+    if (settings["enableHQ"]) {
+        authToken = getCookie("oauth_token");
+    }
+
+    // Resolve the track URL to a track object
+    let trackObj = await fetchAuthorized(
+        "https://api-v2.soundcloud.com/resolve",
+        authToken,
+        {
             "url": trackUrl,
-            "format": "json",
-            "client_id": clientId,
-        }), {
-            "redirect": "follow",
         }
     );
-    let json = await resp.json();
-    return json;
-}
-
-// Gets the URL used to download the track with the given ID.
-async function getTrackMp3Url(trackId) {
-    let resp = await fetch(
-        withQuery(`https://api.soundcloud.com/i1/tracks/${trackId}/streams`, {
-            "client_id": clientId,
-        })
-    );
-    let json = await resp.json();
-    return json["http_mp3_128_url"];
-}
-
-// Initiates a download for the specified track.
-async function downloadTrack(trackUrl) {
-    let info = await getTrackInfo(trackUrl);
 
     // If the track is natively downloadable, just replicate
     // the original download button behavior.
-    if (info["downloadable"]) {
+    if (trackObj["downloadable"] && trackObj["has_downloads_left"]) {
         downloadUrl(
-            withQuery(info["download_url"], {
+            withQuery(trackObj["download_url"], {
                 "client_id": clientId,
             }),
             null
@@ -63,23 +156,7 @@ async function downloadTrack(trackUrl) {
         return;
     }
 
-    // Generate a user-friendly name for the song.
-    // Heuristic: if the title already contains a dash,
-    // use that as the full name; otherwise prepend the
-    // uploader's name.
-    let name = info["title"]
-    if (!name.includes(" - ")) {
-        let artist = info["user"]["username"];
-        name = `${artist} - ${name}`;
-    }
-
-    // a.download doesn't work with cross-origin requests;
-    // since the file is hosted on a CDN we do an ugly workaround
-    // with blob URLs which are exempt from the policy.
-    let mp3Url = await getTrackMp3Url(info["id"]);
-    let resp = await fetch(mp3Url);
-    let blob = await resp.blob();
-    downloadUrl(URL.createObjectURL(blob), `${name}.mp3`);
+    return await downloadTrackTranscoding(trackObj, authToken);
 }
 
 // Guesses a track URL given a DOM element that may or
@@ -156,6 +233,7 @@ function injectDownloadButton(elem) {
                 button.innerText = "Download";
             } catch (ex) {
                 button.innerText = "Failed :-(";
+                alert(ex.toString());
                 throw ex;
             } finally {
                 button.classList.remove("sc-button-selected");
