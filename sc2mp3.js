@@ -249,18 +249,30 @@ function injectDownloadButton(elem) {
 // after the DOM is ready.
 async function scrapeClientId() {
     // This code makes me want to gouge out my eyes!
-    // It finds the .js file containing the client ID,
-    // and SEARCHES THROUGH THE SOURCE CODE WITH A REGEX.
+    // It loads every .js file in the page, and SEARCHES THROUGH
+    // THE SOURCE CODE WITH A REGEX for the client ID!
     // It's totally insane, but it works, so...
     for (let script of document.getElementsByTagName("script")) {
-        if (script.src.includes("/assets/app-")) {
-            let resp = await fetch(script.src);
-            let src = await resp.text();
-            let match = src.match(/client_id:["']([A-Za-z0-9]{32})['"]/);
+        if (script.src === "") {
+            continue;
+        }
+
+        let resp;
+        try {
+            resp = await fetch(script.src);
+        } catch (ex) {
+            continue;
+        }
+
+        let src = await resp.text();
+        let match = src.match(/client_id:["']([A-Za-z0-9]{32})['"]/);
+        if (match !== null) {
             let clientId = match[1];
             return clientId;
         }
     }
+
+    throw new Error("Could not get client_id value from current page");
 }
 
 // Begins listening for DOM events and immediately injects
