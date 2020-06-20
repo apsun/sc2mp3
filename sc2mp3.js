@@ -66,18 +66,17 @@ function downloadUrl(url, filename) {
     document.body.removeChild(a);
 }
 
-// Picks a transcoding matching the specified quality ("hq" or "sq").
-function pickTranscoding(trackObj, quality) {
-    // SoundCloud has two formats - a HLS streaming playlist and
-    // a plain old music file ("progressive"). Obviously, we want
-    // to pick the easier method, so use progressive formats.
+// Picks a transcoding matching the specified quality ("hq" or "sq")
+// and protocol ("progressive" or "hls").
+function pickTranscoding(trackObj, quality, protocol) {
     for (let transcoding of trackObj["media"]["transcodings"]) {
-        if (transcoding["format"]["protocol"] !== "progressive") {
+        if (transcoding["format"]["protocol"] !== protocol) {
             continue;
         }
-        if (transcoding["quality"] === quality) {
-            return transcoding;
+        if (transcoding["quality"] !== quality) {
+            continue;
         }
+        return transcoding;
     }
     return null;
 }
@@ -95,13 +94,53 @@ function getTrackName(trackObj) {
     return name;
 }
 
+// Ghetto non-compliant HLS playlist parser that just returns
+// all the segment URLs.
+function getHlsSegmentUrls(m3u8) {
+    if (!m3u8.startsWith("#EXTM3U")) {
+        throw new Error("Invalid HLS playlist file");
+    }
+    let uris = [];
+    let lines = m3u8.split(/\r?\n/);
+    for (let line of lines) {
+        if (line === "") {
+            continue;
+        }
+        if (line[0] === "#") {
+            // EXT-X-MAP tag points to the file header, other parts
+            // of the file are just plain links
+            let match = line.match(/^#EXT-X-MAP:URI="(.+?)"/);
+            if (match !== null) {
+                uris.push(match[1]);
+            }
+            continue;
+        }
+        uris.push(line);
+    }
+    return uris;
+}
+
+// Given a list of URLs pointing to blobs, downloads all of
+// them and merges them into a single resulting blob.
+async function downloadAndMergeSegments(urls) {
+    let segments = await Promise.all(
+        urls.map((u) => fetch(u).then((r) => r.blob()))
+    );
+    return new Blob(segments);
+}
+
 // Initiates a download for the specified track using one of
 // the transcoded versions (as opposed to the original).
 async function downloadTrackTranscoding(trackObj, authToken) {
-    // Pick a transcoding, preferring HQ obviously
+    console.log(trackObj);
+
+    // Pick a transcoding, preferring HQ > SQ and progressive
+    // over HLS
     let transcoding =
-        pickTranscoding(trackObj, "hq") ||
-        pickTranscoding(trackObj, "sq");
+        pickTranscoding(trackObj, "hq", "progressive") ||
+        pickTranscoding(trackObj, "hq", "hls") ||
+        pickTranscoding(trackObj, "sq", "progressive") ||
+        pickTranscoding(trackObj, "sq", "hls");
     if (transcoding === null) {
         throw new Error("Failed to find a valid transcoding");
     }
@@ -109,6 +148,24 @@ async function downloadTrackTranscoding(trackObj, authToken) {
     // One more level of indirection here...
     let urlResp = await fetchAuthorizedJson(transcoding["url"], authToken, {});
     let url = urlResp["url"];
+
+    // If this is a progressive ("direct") link, download the track
+    // directly. Otherwise, download the HLS playlist as text and
+    // then download the chunks.
+    let resp = await fetch(url);
+    let blob;
+    if (transcoding["format"]["protocol"] === "progressive") {
+        blob = await resp.blob();
+    } else if (transcoding["format"]["protocol"] === "hls") {
+        let m3u8 = await resp.text();
+        let segments = getHlsSegmentUrls(m3u8);
+        blob = await downloadAndMergeSegments(segments);
+
+        // Original URL points to the m3u8 file, so replace it with
+        // one of the segment URLs so we can accurately determine
+        // the file extension.
+        url = segments[0];
+    }
 
     // Build filename from track name and extension of file URL.
     // HQ files are .m4a, SQ files are .mp3
@@ -120,8 +177,6 @@ async function downloadTrackTranscoding(trackObj, authToken) {
     // a.download doesn't work with cross-origin requests;
     // since the file is hosted on a CDN we do an ugly workaround
     // with blob URLs which are exempt from the policy.
-    let resp = await fetch(url);
-    let blob = await resp.blob();
     downloadUrl(URL.createObjectURL(blob), filename);
 }
 
@@ -238,7 +293,7 @@ function injectDownloadButton(elem) {
                 button.innerText = "Download";
             } catch (ex) {
                 button.innerText = "Failed :-(";
-                alert(ex.toString());
+                alert(ex.toString() + "\n\n" + ex.stack);
                 throw ex;
             } finally {
                 button.classList.remove("sc-button-selected");
