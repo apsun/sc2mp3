@@ -26,9 +26,9 @@ async function fetchJson(url, init) {
     return json;
 }
 
-// Wrapper for fetchQuery() that adds the clientId and
+// Wrapper for fetchJson() that adds the clientId and
 // authToken parameters.
-async function fetchAuthorized(url, authToken, args) {
+async function fetchAuthorizedJson(url, authToken, args) {
     let headers = {};
     if (authToken !== null) {
         headers["Authorization"] = "OAuth " + authToken;
@@ -107,7 +107,7 @@ async function downloadTrackTranscoding(trackObj, authToken) {
     }
 
     // One more level of indirection here...
-    let urlResp = await fetchAuthorized(transcoding["url"], authToken, {});
+    let urlResp = await fetchAuthorizedJson(transcoding["url"], authToken, {});
     let url = urlResp["url"];
 
     // Build filename from track name and extension of file URL.
@@ -128,7 +128,7 @@ async function downloadTrackTranscoding(trackObj, authToken) {
 // Initiates a download for the specified track using the
 // native download option.
 async function downloadNative(trackId) {
-    let json = await fetchAuthorized(
+    let json = await fetchAuthorizedJson(
         `https://api-v2.soundcloud.com/tracks/${trackId}/download`,
         null
     );
@@ -147,7 +147,7 @@ async function downloadTrack(trackUrl) {
     }
 
     // Resolve the track URL to a track object
-    let trackObj = await fetchAuthorized(
+    let trackObj = await fetchAuthorizedJson(
         "https://api-v2.soundcloud.com/resolve",
         authToken,
         {
