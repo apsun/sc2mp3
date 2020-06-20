@@ -125,6 +125,17 @@ async function downloadTrackTranscoding(trackObj, authToken) {
     downloadUrl(URL.createObjectURL(blob), filename);
 }
 
+// Initiates a download for the specified track using the
+// native download option.
+async function downloadNative(trackId) {
+    let json = await fetchAuthorized(
+        `https://api-v2.soundcloud.com/tracks/${trackId}/download`,
+        null
+    );
+    let url = json["redirectUri"];
+    downloadUrl(url);
+}
+
 // Initiates a download for the specified track URL.
 async function downloadTrack(trackUrl) {
     // If we want to download in HQ, read the auth cookie so
@@ -147,13 +158,7 @@ async function downloadTrack(trackUrl) {
     // If the track is natively downloadable, just replicate
     // the original download button behavior.
     if (trackObj["downloadable"] && trackObj["has_downloads_left"]) {
-        downloadUrl(
-            withQuery(trackObj["download_url"], {
-                "client_id": clientId,
-            }),
-            null
-        );
-        return;
+        return await downloadNative(trackObj["id"]);
     }
 
     return await downloadTrackTranscoding(trackObj, authToken);
