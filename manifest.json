@@ -1,5 +1,5 @@
 {
-  "manifest_version": 2,
+  "manifest_version": 3,
   "name": "SoundCloud to MP3",
   "description": "Adds a download button to SoundCloud tracks",
   "browser_specific_settings": {
@@ -9,9 +9,11 @@
   },
   "version": "1.6",
   "permissions": [
-    "*://*.soundcloud.com/*",
-    "*://*.sndcdn.com/*",
     "storage"
+  ],
+  "host_permissions": [
+    "*://*.soundcloud.com/*",
+    "*://*.sndcdn.com/*"
   ],
   "content_scripts": [
     {
