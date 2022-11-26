@@ -18,10 +18,7 @@
   "content_scripts": [
     {
       "matches": ["*://*.soundcloud.com/*"],
-      "js": [
-        "browser-polyfill.js",
-        "sc2mp3.js"
-      ]
+      "js": ["sc2mp3.js"]
     }
   ],
   "options_ui": {

@@ -196,8 +196,8 @@ async function downloadTrack(trackUrl) {
     // If we want to download in HQ, read the auth cookie so
     // we can see HQ transcodings
     let authToken = null;
-    if (typeof browser !== "undefined" && browser.storage) {
-        let settings = await browser.storage.sync.get("enableHQ");
+    if (typeof chrome !== "undefined" && chrome.storage) {
+        let settings = await chrome.storage.sync.get("enableHQ");
         if (settings["enableHQ"]) {
             authToken = getCookie("oauth_token");
         }
