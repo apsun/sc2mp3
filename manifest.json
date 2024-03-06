@@ -7,7 +7,7 @@
       "id": "sc2mp3@crossbowffs.com"
     }
   },
-  "version": "1.5",
+  "version": "1.6",
   "permissions": [
     "*://*.soundcloud.com/*",
     "*://*.sndcdn.com/*",

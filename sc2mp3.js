@@ -230,7 +230,9 @@ function getTrackUrlForElement(elem) {
         elem.closest(".soundList__item") ||  // Stream
         elem.closest(".trackList__item") ||  // Sets
         elem.closest(".soundBadgeList__item") ||  // Likes sidebar
-        elem.closest(".historicalPlays__item");  // History sidebar
+        elem.closest(".historicalPlays__item") ||  // History sidebar
+        elem.closest(".searchList__item") ||  // Search
+        null;
 
     // This item is in a list, now look for a clickable title within
     // the container.
