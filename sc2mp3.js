@@ -182,10 +182,10 @@ async function downloadTrackTranscoding(trackObj, authToken) {
 
 // Initiates a download for the specified track using the
 // native download option.
-async function downloadNative(trackId) {
+async function downloadNative(trackId, authToken) {
     let json = await fetchAuthorizedJson(
         `https://api-v2.soundcloud.com/tracks/${trackId}/download`,
-        null
+        authToken
     );
     let url = json["redirectUri"];
     downloadUrl(url);
@@ -213,9 +213,13 @@ async function downloadTrack(trackUrl) {
     );
 
     // If the track is natively downloadable, just replicate
-    // the original download button behavior.
-    if (trackObj["downloadable"] && trackObj["has_downloads_left"]) {
-        return await downloadNative(trackObj["id"]);
+    // the original download button behavior. This now requires
+    // authentication, so only do it if we have the OAuth token.
+    if (trackObj["downloadable"] &&
+        trackObj["has_downloads_left"] &&
+        authToken !== null)
+    {
+        return await downloadNative(trackObj["id"], authToken);
     }
 
     return await downloadTrackTranscoding(trackObj, authToken);
