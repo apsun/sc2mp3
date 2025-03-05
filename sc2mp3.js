@@ -88,7 +88,8 @@ function getTrackName(trackObj) {
     // uploader's name.
     let name = trackObj["title"];
     if (!name.includes(" - ")) {
-        let artist = trackObj["user"]["username"];
+        let artist = trackObj["publisher_metadata"]?.["artist"] ??
+            trackObj["user"]["username"];
         name = `${artist} - ${name}`;
     }
     return name;
