@@ -17,7 +17,7 @@
   ],
   "content_scripts": [
     {
-      "matches": ["*://*.soundcloud.com/*"],
+      "matches": ["*://soundcloud.com/*"],
       "js": ["sc2mp3.js"],
       "all_frames": true
     }
