@@ -133,8 +133,6 @@ async function downloadAndMergeSegments(urls) {
 // Initiates a download for the specified track using one of
 // the transcoded versions (as opposed to the original).
 async function downloadTrackTranscoding(trackObj, authToken) {
-    console.log(trackObj);
-
     // Pick a transcoding, preferring HQ > SQ and progressive
     // over HLS
     let transcoding =
@@ -143,7 +141,11 @@ async function downloadTrackTranscoding(trackObj, authToken) {
         pickTranscoding(trackObj, "sq", "progressive") ||
         pickTranscoding(trackObj, "sq", "hls");
     if (transcoding === null) {
-        throw new Error("Failed to find a valid transcoding");
+        let transcodings = trackObj["media"]["transcodings"];
+        let options = transcodings.map(
+            (t) => (`protocol=${t["format"]["protocol"]}, quality=${t["quality"]}`)
+        );
+        throw new Error(`Failed to find a valid transcoding (options: ${options.join("; ")})`);
     }
 
     // One more level of indirection here...
@@ -227,101 +229,168 @@ async function downloadTrack(trackUrl) {
 }
 
 // Guesses a track URL given a DOM element that may or
-// may not be a track.
+// may not be associated with a track.
 function getTrackUrlForElement(elem) {
+    let trackUrl = null;
+
     // Look for the closest container, which happens when the track
     // is not the single main track on the page.
     let container =
-        elem.closest(".soundList__item") ||  // Stream
-        elem.closest(".trackList__item") ||  // Sets
-        elem.closest(".soundBadgeList__item") ||  // Likes sidebar
-        elem.closest(".historicalPlays__item") ||  // History sidebar
-        elem.closest(".searchList__item") ||  // Search
+        elem.closest(".compactTrackList__item") ||
+        elem.closest(".trackList__item") ||
+        elem.closest(".soundList__item") ||
+        elem.closest(".badgeList__item") ||
+        elem.closest(".soundBadgeList__item") ||
+        elem.closest(".historicalPlays__item") ||
+        elem.closest(".searchList__item") ||
         null;
 
-    // This item is in a list, now look for a clickable title within
+    // If the item is in a container, look for a clickable title within
     // the container.
     if (container !== null) {
         let title =
             container.querySelector(".soundTitle__title") ||
-            container.querySelector(".trackItem__trackTitle");
+            container.querySelector(".trackItem__trackTitle") ||
+            container.querySelector(".playableTile__mainHeading");
 
         if (title !== null && title.tagName === "A") {
-            return title.href;
+            trackUrl = title.href;
         }
     }
 
-    // Default to the page URL
-    return window.location.href;
+    // Otherwise, fallback to the page URL
+    if (trackUrl === null) {
+        trackUrl = window.location.href;
+    }
+
+    // Remove query string (breaks the /resolve endpoint)
+    trackUrl = trackUrl.split("?")[0];
+
+    // Skip "tracks" that are actually sets
+    if (trackUrl.includes("/sets/")) {
+        return null;
+    }
+
+    // Convert soundcloud.com/n/x -> soundcloud.com/x
+    // (used by the new player iframe)
+    trackUrl = trackUrl.replace("/n/", "/");
+
+    return trackUrl;
 }
 
 // Adds download buttons to all action bars under the given element
 // that do not already have them.
 function injectDownloadButton(elem) {
+    const oldDownloadSvg = '<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M8 15A7 7 0 108 1a7 7 0 000 14zm3.47-7.53l1.06 1.06L8 13.06 3.47 8.53l1.06-1.06 2.72 2.72V3h1.5v7.19l2.72-2.72z" fill="currentColor"></path></svg>';
+    const oldDotDotSvg = '<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M4 8c0-.832-.67-1.5-1.511-1.5C1.67 6.5 1 7.168 1 8s.67 1.5 1.489 1.5C3.33 9.5 4 8.832 4 8zm5.5 0c0-.832-.67-1.5-1.504-1.5C7.17 6.5 6.5 7.168 6.5 8s.67 1.5 1.496 1.5C8.831 9.5 9.5 8.832 9.5 8zM15 8c0-.832-.664-1.5-1.493-1.5C12.664 6.5 12 7.168 12 8s.664 1.5 1.507 1.5C14.336 9.5 15 8.832 15 8z" fill="currentColor"></path></svg>';
+    const newDownloadSvg = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M12.75 3v15.44l5.5-5.5L19.31 14 12 21.31 4.69 14l1.06-1.06 5.5 5.5V3h1.5Z" clip-rule="evenodd"></path></svg>';
+    const newDotDotSvg = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M8 12C8 12.8284 7.32843 13.5 6.5 13.5C5.67157 13.5 5 12.8284 5 12C5 11.1716 5.67157 10.5 6.5 10.5C7.32843 10.5 8 11.1716 8 12Z" fill="currentColor"></path><path d="M13.5 12C13.5 12.8284 12.8284 13.5 12 13.5C11.1716 13.5 10.5 12.8284 10.5 12C10.5 11.1716 11.1716 10.5 12 10.5C12.8284 10.5 13.5 11.1716 13.5 12Z" fill="currentColor"></path><path d="M17.5 13.5C18.3284 13.5 19 12.8284 19 12C19 11.1716 18.3284 10.5 17.5 10.5C16.6716 10.5 16 11.1716 16 12C16 12.8284 16.6716 13.5 17.5 13.5Z" fill="currentColor"></path></svg>';
+
     // Sometimes we get text nodes from MutationObserver
     if (!(elem instanceof HTMLElement)) {
         return;
     }
 
-    // Find all the action bars under this element.
-    let actionDivs = elem.querySelectorAll(".soundActions");
-    for (let actionDiv of actionDivs) {
-        // Check that we don't already have a download button
-        if (actionDiv.querySelector(".sc-button-download") !== null) {
+    // Find all like buttons (old design, main page)
+    let likeButtons = elem.querySelectorAll("button.sc-button-like");
+    for (let likeButton of likeButtons) {
+        let container = likeButton.parentNode;
+        if (container.querySelector("button.sc-button-download") !== null) {
             continue;
         }
 
-        // We're going to copy the style from the like button,
-        // so assume it exists
-        let likeButton = actionDiv.querySelector(".sc-button-like");
-        if (likeButton === null) {
+        let trackUrl = getTrackUrlForElement(likeButton);
+        if (trackUrl === null) {
             continue;
         }
 
-        // Figure out what track this button set corresponds to,
-        // skip "tracks" that are actually sets
-        let trackUrl = getTrackUrlForElement(actionDiv);
-        if (new URL(trackUrl).pathname.includes("/sets/")) {
-            continue;
-        }
+        let icon = document.createElement("div");
+        icon.innerHTML = oldDownloadSvg;
 
-        // Create our download button
+        let likeLabel = likeButton.querySelector("span.sc-button-label");
+        let label = document.createElement("span");
+        label.innerText = "Download";
+        label.className = likeLabel.className;
+
         let button = document.createElement("button");
         button.className = likeButton.className.replace(
             "sc-button-like",
             "sc-button-download"
         );
         button.classList.remove("sc-button-selected");
-        button.innerText = "Download";
-        button.title = "Download";
+        button.title = "Download (sc2mp3)";
+        button.ariaLabel = "Download track";
+        button.appendChild(icon);
+        button.appendChild(label);
+
         button.onclick = async (e) => {
-            button.innerText = "Downloading...";
-            button.classList.add("sc-button-selected");
             try {
+                button.classList.add("sc-button-selected");
+                icon.innerHTML = oldDotDotSvg;
+                label.innerText = "Downloading...";
+                button.appendChild(label);
                 await downloadTrack(trackUrl);
-                button.innerText = "Download";
             } catch (ex) {
-                button.innerText = "Failed :-(";
                 alert(ex.toString() + "\n\n" + ex.stack);
                 throw ex;
             } finally {
                 button.classList.remove("sc-button-selected");
+                icon.innerHTML = oldDownloadSvg;
+                label.innerText = "Download";
+                button.appendChild(label);
             }
         };
+        container.insertBefore(button, likeButton.nextSibling);
+    }
 
-        // Insert our download button into the page
-        likeButton.parentNode.appendChild(button);
+    // Find all share buttons (new design, player iframe)
+    let shareButtons = elem.querySelectorAll("button[aria-label='Share']");
+    for (let shareButton of shareButtons) {
+        let container = shareButton.parentNode;
+        if (container.querySelector("button[aria-label='Download track']") !== null) {
+            continue;
+        }
+
+        let trackUrl = getTrackUrlForElement(shareButton);
+        if (trackUrl === null) {
+            continue;
+        }
+
+        let button = document.createElement("button");
+        button.className = shareButton.className;
+        button.title = "Download (sc2mp3)";
+        button.ariaLabel = "Download track";
+        button.innerHTML = newDownloadSvg;
+        button.onclick = async (e) => {
+            try {
+                button.innerHTML = newDotDotSvg;
+                await downloadTrack(trackUrl);
+            } catch (ex) {
+                alert(ex.toString() + "\n\n" + ex.stack);
+                throw ex;
+            } finally {
+                button.innerHTML = newDownloadSvg;
+            }
+        };
+        container.insertBefore(button, shareButton.nextSibling);
     }
 }
 
 // Gets the client ID from the current page. Must only be called
 // after the DOM is ready.
 async function scrapeClientId() {
+    // Script isn't available in the player iframe, so walk up to
+    // the parent page
+    let win = window;
+    while (win.parent !== win) {
+        win = win.parent;
+    }
+
     // This code makes me want to gouge out my eyes!
     // It loads every .js file in the page, and SEARCHES THROUGH
     // THE SOURCE CODE WITH A REGEX for the client ID!
     // It's totally insane, but it works, so...
-    for (let script of document.getElementsByTagName("script")) {
+    for (let script of win.document.getElementsByTagName("script")) {
         if (script.src === "") {
             continue;
         }
@@ -348,22 +417,27 @@ async function scrapeClientId() {
 // download buttons into the DOM. Must only be called after
 // the DOM is ready.
 async function init() {
-    clientId = await scrapeClientId();
+    try {
+        clientId = await scrapeClientId();
 
-    let observer = new MutationObserver((mutations, observer) => {
-        for (let mutation of mutations) {
-            for (let elem of mutation.addedNodes) {
-                injectDownloadButton(elem);
+        let observer = new MutationObserver((mutations, observer) => {
+            for (let mutation of mutations) {
+                for (let elem of mutation.addedNodes) {
+                    injectDownloadButton(elem);
+                }
             }
-        }
-    });
-    
-    observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-    });
+        });
 
-    injectDownloadButton(document.body);
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+        });
+
+        injectDownloadButton(document.body);
+    } catch (ex) {
+        alert("Failed to initialize sc2mp3: " + ex.toString() + "\n\n" + ex.stack);
+        throw ex;
+    }
 }
 
 if (document.readyState === "loading") {
