@@ -266,14 +266,16 @@ function getTrackUrlForElement(elem) {
     // Remove query string (breaks the /resolve endpoint)
     trackUrl = trackUrl.split("?")[0];
 
-    // Skip "tracks" that are actually sets
-    if (trackUrl.includes("/sets/")) {
-        return null;
-    }
-
     // Convert soundcloud.com/n/x -> soundcloud.com/x
     // (used by the new player iframe)
     trackUrl = trackUrl.replace("/n/", "/");
+
+    // Only allow paths in the format /<artist>/<track>
+    let blacklist = ["discover", "feed", "you"];
+    let path = new URL(trackUrl).pathname.split("/");
+    if (path.length !== 3 || blacklist.includes(path[1])) {
+        return null;
+    }
 
     return trackUrl;
 }
