@@ -330,7 +330,6 @@ function injectDownloadButton(elem) {
                 button.classList.add("sc-button-selected");
                 icon.innerHTML = oldDotDotSvg;
                 label.innerText = "Downloading...";
-                button.appendChild(label);
                 await downloadTrack(trackUrl);
             } catch (ex) {
                 alert(ex.toString() + "\n\n" + ex.stack);
@@ -339,7 +338,6 @@ function injectDownloadButton(elem) {
                 button.classList.remove("sc-button-selected");
                 icon.innerHTML = oldDownloadSvg;
                 label.innerText = "Download";
-                button.appendChild(label);
             }
         };
         container.insertBefore(button, likeButton.nextSibling);
