@@ -10,6 +10,10 @@ Yet another SoundCloud downloader.
 - Uses native download option if available
 - Download in HQ with a SoundCloud Go+ subscription
 
+## Demo
+
+[](https://github.com/user-attachments/assets/47de874c-1309-478c-8911-3da572845408)
+
 ## How do I download in HQ?
 
 You need to be a SoundCloud Go+ subscriber for this feature to work.
